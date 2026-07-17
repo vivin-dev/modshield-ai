@@ -1,1 +1,410 @@
-[Copy the entire contents of modshield_ai_prototype.html from the outputs folder]
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ModShield AI - Interactive Prototype</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #1a1a1a; line-height: 1.6; }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+  .header { text-align: center; margin-bottom: 2rem; }
+  .header h1 { font-size: 28px; font-weight: 600; margin-bottom: 0.5rem; }
+  .header p { color: #666; font-size: 14px; }
+
+  .tabs { display: flex; gap: 8px; margin-bottom: 2rem; border-bottom: 1px solid #ddd; }
+  .tab { padding: 12px 16px; background: none; border: none; cursor: pointer; font-size: 14px; font-weight: 500; color: #666; border-bottom: 3px solid transparent; transition: all 0.3s; }
+  .tab.active { color: #1a1a1a; border-bottom-color: #378add; }
+  .tab:hover { color: #1a1a1a; }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; animation: fadeIn 0.3s; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 2rem; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 2rem; }
+  @media (max-width: 768px) {
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  }
+
+  .card { background: white; border: 0.5px solid #ddd; border-radius: 8px; padding: 1.25rem; }
+  .card-title { font-size: 13px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .card-value { font-size: 24px; font-weight: 600; color: #1a1a1a; }
+
+  .message-stream { max-height: 400px; overflow-y: auto; border: 0.5px solid #ddd; border-radius: 8px; background: white; }
+  .message-item { padding: 12px 16px; border-bottom: 0.5px solid #ddd; font-size: 14px; }
+  .message-item:last-child { border-bottom: none; }
+  .message-user { font-weight: 600; color: #378add; }
+  .message-text { margin: 4px 0 8px; }
+  .message-toxicity { font-size: 12px; display: flex; gap: 12px; margin-top: 8px; }
+  .score { padding: 2px 8px; border-radius: 4px; background: #fafafa; }
+  .score.high { background: #ffe6e6; color: #a32d2d; }
+  .score.medium { background: #fff4e6; color: #854f0b; }
+  .score.low { background: #eaf3de; color: #3b6d11; }
+
+  .action-badge { display: inline-block; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 500; margin-top: 6px; }
+  .action-warn { background: #fff4e6; color: #854f0b; }
+  .action-mute { background: #e6f1fb; color: #185fa5; }
+  .action-ban { background: #ffe6e6; color: #a32d2d; }
+  .action-shadow { background: #f0f0f0; color: #444; }
+
+  .controls { display: flex; gap: 8px; margin-bottom: 2rem; flex-wrap: wrap; }
+  button { padding: 8px 16px; background: #378add; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; transition: 0.2s; }
+  button:hover { background: #1d7cb8; }
+  button.secondary { background: #fafafa; color: #1a1a1a; border: 0.5px solid #ddd; }
+  button.secondary:hover { background: white; }
+
+  .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 2rem; }
+  @media (max-width: 768px) { .metrics-grid { grid-template-columns: repeat(2, 1fr); } }
+
+  .threat-item { background: white; border: 0.5px solid #ddd; border-left: 3px solid #e24b4a; border-radius: 6px; padding: 12px; margin-bottom: 12px; }
+  .threat-source { font-size: 12px; color: #a32d2d; font-weight: 600; text-transform: uppercase; }
+  .threat-keyword { font-size: 14px; font-weight: 500; margin: 4px 0; }
+  .threat-time { font-size: 12px; color: #666; }
+
+  .chart-container { position: relative; height: 300px; margin-bottom: 2rem; }
+
+  .admin-panel { background: white; border: 0.5px solid #ddd; border-radius: 8px; padding: 16px; }
+  .action-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .action-row select { padding: 6px 10px; border: 0.5px solid #ddd; border-radius: 4px; font-size: 13px; }
+  .action-row button { margin: 0; }
+
+  .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 0.5px solid #ddd; }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-label { font-size: 14px; color: #666; }
+  .stat-value { font-size: 16px; font-weight: 600; }
+
+  textarea { font-family: 'Monaco', 'Menlo', monospace; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>ModShield AI - Interactive Prototype</h1>
+    <p>See how your Discord server gets protected in real-time</p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('dashboard')">Dashboard</button>
+    <button class="tab" onclick="switchTab('simulator')">Message Simulator</button>
+    <button class="tab" onclick="switchTab('threats')">External Threats</button>
+    <button class="tab" onclick="switchTab('admin')">Admin Panel</button>
+  </div>
+
+  <!-- TAB 1: DASHBOARD -->
+  <div id="dashboard" class="tab-content active">
+    <div class="grid-3">
+      <div class="card">
+        <div class="card-title">Messages Analyzed</div>
+        <div class="card-value" id="totalMessages">2,847</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Toxicity Rate</div>
+        <div class="card-value" id="toxRate">8.3%</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Mod Burnout</div>
+        <div class="card-value" id="burnout">32%</div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Actions Taken</div>
+        <div class="stat-row">
+          <span class="stat-label">⚠️ Warnings</span>
+          <span class="stat-value" id="warns">47</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">🔇 Mutes</span>
+          <span class="stat-value" id="mutes">12</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">🚫 Bans</span>
+          <span class="stat-value" id="bans">3</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">👻 Shadow Bans</span>
+          <span class="stat-value" id="shadows">8</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Toxicity Trends (7 days)</div>
+        <div class="chart-container">
+          <canvas id="toxChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Live Message Stream</div>
+      <div class="controls">
+        <button onclick="simulateMessage()">➕ Add Random Message</button>
+        <button class="secondary" onclick="clearMessages()">Clear Stream</button>
+      </div>
+      <div class="message-stream" id="messageStream"></div>
+    </div>
+  </div>
+
+  <!-- TAB 2: SIMULATOR -->
+  <div id="simulator" class="tab-content">
+    <div class="card">
+      <div class="card-title">Message Toxicity Simulator</div>
+      <p style="margin-bottom: 1rem; color: #666; font-size: 14px;">Type a message to see how ModShield AI scores and responds to it.</p>
+
+      <textarea id="userMessage" placeholder="Enter a Discord message (good, toxic, gaming slang, etc.)..." style="width: 100%; height: 80px; padding: 10px; border: 0.5px solid #ddd; border-radius: 6px; font-family: monospace; font-size: 13px; resize: vertical; margin-bottom: 12px;"></textarea>
+
+      <button onclick="analyzeMessage()" style="width: 100%; margin-bottom: 2rem;">🤖 Analyze This Message</button>
+
+      <div id="analysisResult" style="display: none;">
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">Toxicity Score</div>
+            <div style="display: flex; align-items: baseline; gap: 8px;">
+              <div class="card-value" id="scoreValue">0.0</div>
+              <div style="font-size: 12px; color: #666;">/1.0</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">Recommended Action</div>
+            <div id="actionRec" style="font-size: 16px; font-weight: 600; margin-top: 4px;">None</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">AI Analysis Reasoning</div>
+          <div id="reasoning" style="font-size: 13px; color: #666; line-height: 1.6;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 3: THREATS -->
+  <div id="threats" class="tab-content">
+    <div class="card">
+      <div class="card-title">External Threat Intelligence</div>
+      <p style="margin-bottom: 1rem; color: #666; font-size: 14px;">Monitoring keywords on Reddit, Twitch, and internal Discord links for raid coordination.</p>
+
+      <button onclick="simulateThreat()">➕ Simulate Threat Detection</button>
+
+      <div id="threatLog" style="margin-top: 1.5rem;"></div>
+    </div>
+  </div>
+
+  <!-- TAB 4: ADMIN -->
+  <div id="admin" class="tab-content">
+    <div class="card">
+      <div class="card-title">Admin Control Panel</div>
+      <p style="margin-bottom: 1rem; color: #666; font-size: 14px;">Review and override AI decisions. All actions are logged.</p>
+
+      <div class="admin-panel">
+        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 1rem;">Recent AI Decisions (Awaiting Review)</h3>
+        <div id="adminQueue"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let messages = [];
+  let toxData = [4, 5, 7, 9, 8, 6, 8.3];
+  let toxChart = null;
+  let threats = [];
+
+  const toxicMessages = [
+    { user: "ShadowKing", text: "you're such a trash player, uninstall now", toxic: 0.92 },
+    { user: "ProGamer42", text: "this build is broken af, devs are incompetent", toxic: 0.78 },
+    { user: "GhostNinja", text: "dude that was insane, nuke their base", toxic: 0.15 },
+    { user: "CasualPlayer", text: "anyone wanna play some comp? looking for chill vibes", toxic: 0.02 },
+    { user: "ToxicSmurf", text: "I hope you get banned for this stupid play", toxic: 0.85 },
+    { user: "GamerJoe", text: "lol get wrecked, that was brutal", toxic: 0.25 },
+    { user: "ModerationTest", text: "the server is great, thanks for keeping it safe", toxic: 0.01 },
+  ];
+
+  const threatKeywords = [
+    { keyword: "our-server-name", source: "reddit", severity: 3 },
+    { keyword: "discord-invite-ABC123", source: "reddit", severity: 4 },
+    { keyword: "raid-this-server", source: "discord_internal", severity: 4 },
+    { keyword: "invite-stream", source: "twitch", severity: 2 },
+  ];
+
+  function switchTab(tab) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+    document.getElementById(tab).classList.add('active');
+    event.target.classList.add('active');
+
+    if (tab === 'dashboard' && !toxChart) setTimeout(initChart, 100);
+  }
+
+  function initChart() {
+    const ctx = document.getElementById('toxChart')?.getContext('2d');
+    if (!ctx) return;
+    toxChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+        datasets: [{
+          label: 'Toxicity %',
+          data: toxData,
+          borderColor: '#e24b4a',
+          backgroundColor: 'rgba(226, 75, 74, 0.05)',
+          tension: 0.4,
+          fill: true,
+          pointRadius: 4,
+          pointBackgroundColor: '#e24b4a',
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { min: 0, max: 15, ticks: { callback: v => v + '%' } }
+        }
+      }
+    });
+  }
+
+  function simulateMessage() {
+    const msg = toxicMessages[Math.floor(Math.random() * toxicMessages.length)];
+    addMessageToStream(msg.user, msg.text, msg.toxic);
+  }
+
+  function addMessageToStream(user, text, score) {
+    messages.unshift({ user, text, score, time: new Date() });
+    if (messages.length > 20) messages.pop();
+    renderMessageStream();
+    updateMetrics();
+  }
+
+  function renderMessageStream() {
+    const stream = document.getElementById('messageStream');
+    stream.innerHTML = messages.map(msg => {
+      let action = 'none';
+      let actionClass = '';
+      if (msg.score > 0.8) { action = 'ban'; actionClass = 'action-ban'; }
+      else if (msg.score > 0.6) { action = 'mute'; actionClass = 'action-mute'; }
+      else if (msg.score > 0.3) { action = 'warn'; actionClass = 'action-warn'; }
+      else if (msg.score > 0.15) { action = 'shadow-ban'; actionClass = 'action-shadow'; }
+
+      let scoreClass = msg.score > 0.6 ? 'high' : msg.score > 0.3 ? 'medium' : 'low';
+
+      return `
+        <div class="message-item">
+          <span class="message-user">${msg.user}</span>
+          <div class="message-text">"${msg.text}"</div>
+          <div class="message-toxicity">
+            <span class="score ${scoreClass}">Score: ${(msg.score * 100).toFixed(0)}%</span>
+            ${action !== 'none' ? `<span class="action-badge ${actionClass}">${action.toUpperCase()}</span>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function clearMessages() {
+    messages = [];
+    renderMessageStream();
+  }
+
+  function analyzeMessage() {
+    const text = document.getElementById('userMessage').value.trim();
+    if (!text) return alert('Enter a message first');
+
+    let score = 0.05 + Math.random() * 0.2;
+    const lowerText = text.toLowerCase();
+
+    const toxicWords = ['trash', 'stupid', 'idiot', 'sucks', 'hate', 'kill', 'die', 'ban', 'cheater', 'noob'];
+    const gamingTerms = ['kill', 'nuke', 'destroy', 'crush', 'obliterate', 'wreck'];
+    const toxicCount = toxicWords.filter(w => lowerText.includes(w)).length;
+    const gamingCount = gamingTerms.filter(w => lowerText.includes(w)).length;
+
+    score += toxicCount * 0.25;
+    score = Math.min(score - (gamingCount * 0.15), 1.0);
+    score = Math.max(score, 0.02);
+
+    if (lowerText.length < 10) score *= 0.7;
+    if (lowerText.includes('jk') || lowerText.includes('lol')) score *= 0.8;
+
+    let action = 'None';
+    let reasoning = '';
+    if (score > 0.8) {
+      action = 'Ban User';
+      reasoning = 'Severe toxicity detected. Multiple profanities and aggressive language targeting other players.';
+    } else if (score > 0.6) {
+      action = 'Mute (30 min)';
+      reasoning = 'High toxicity score. Inappropriate language and hostile tone detected.';
+    } else if (score > 0.3) {
+      action = 'Warn';
+      reasoning = 'Moderate toxicity. Some negative language, but context suggests casual gaming banter.';
+    } else if (score > 0.15) {
+      action = 'Shadow-Ban (Monitor)';
+      reasoning = 'Low toxicity. Message uses gaming terminology that could be misinterpreted.';
+    } else {
+      action = 'None';
+      reasoning = 'No toxicity detected. Message is safe and constructive.';
+    }
+
+    document.getElementById('scoreValue').textContent = score.toFixed(2);
+    document.getElementById('actionRec').textContent = action;
+    document.getElementById('reasoning').textContent = reasoning;
+    document.getElementById('analysisResult').style.display = 'block';
+  }
+
+  function simulateThreat() {
+    const threat = threatKeywords[Math.floor(Math.random() * threatKeywords.length)];
+    threats.unshift({
+      ...threat,
+      id: Math.random(),
+      timestamp: new Date(),
+      url: threat.source === 'reddit' ? 'reddit.com/r/gaming/...' : 'discord.com/...',
+    });
+    if (threats.length > 10) threats.pop();
+    renderThreats();
+  }
+
+  function renderThreats() {
+    const log = document.getElementById('threatLog');
+    if (threats.length === 0) {
+      log.innerHTML = '<p style="color: #666; font-size: 13px;">No threats detected recently.</p>';
+      return;
+    }
+    log.innerHTML = threats.map(t => {
+      const sevLabels = { 2: 'Low', 3: 'Medium', 4: 'Critical' };
+      const sevColor = { 2: 'medium', 3: 'high', 4: 'high' }[t.severity];
+      return `
+        <div class="threat-item">
+          <div class="threat-source">${t.source.toUpperCase()} • ${sevLabels[t.severity]}</div>
+          <div class="threat-keyword">Keyword: "${t.keyword}"</div>
+          <div class="threat-time">Detected: ${t.timestamp.toLocaleTimeString()} on ${t.url}</div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function updateMetrics() {
+    const avgScore = (messages.reduce((sum, m) => sum + m.score, 0) / messages.length * 100).toFixed(1);
+    document.getElementById('totalMessages').textContent = (2847 + messages.length).toLocaleString();
+    document.getElementById('toxRate').textContent = avgScore + '%';
+    document.getElementById('warns').textContent = (47 + messages.filter(m => m.score > 0.3 && m.score <= 0.6).length);
+    document.getElementById('mutes').textContent = (12 + messages.filter(m => m.score > 0.6 && m.score <= 0.8).length);
+    document.getElementById('bans').textContent = (3 + messages.filter(m => m.score > 0.8).length);
+    document.getElementById('burnout').textContent = Math.min(32 + Math.random() * 10, 95).toFixed(0) + '%';
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    renderMessageStream();
+    renderThreats();
+  });
+
+  setTimeout(initChart, 500);
+</script>
+
+</body>
+</html>

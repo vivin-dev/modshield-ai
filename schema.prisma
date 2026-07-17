@@ -1,0 +1,230 @@
+// ModShield AI - Prisma Database Schema
+// Deploy to: Supabase or Neon (free PostgreSQL)
+// Run: npx prisma migrate dev --name init
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ============================================================================
+// TABLE 1: Guild
+// Stores Discord server configurations, active modules, and custom rules.
+// ============================================================================
+model Guild {
+  id                    String   @id @default(cuid())
+  discordGuildId        String   @unique
+  serverName            String
+  ownerId               String   // Discord user ID of server owner
+
+  // Feature flags
+  aiModerationEnabled   Boolean  @default(true)
+  shadowBanEnabled      Boolean  @default(false)
+  externalThreatScan    Boolean  @default(true)
+
+  // Configuration
+  verificationLevel     Int      @default(0) // 0=None, 1=Low, 2=Medium, 3=High, 4=Highest
+  toxicityThreshold     Float    @default(0.7) // 0.0-1.0 score
+
+  // Channels & Webhooks
+  shadowBanChannelId    String?  // Hidden sandbox channel for shadow-banned messages
+  shadowBanWebhookId    String?  // Webhook URL for reposting
+  alertChannelId        String?  // Where to send threat alerts
+
+  // Relationships
+  users                 User[]
+  messages              ChatMessage[]
+  aiActions             AiAction[]
+  threats               ExternalThreat[]
+  metrics               ModMetric[]
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+// ============================================================================
+// TABLE 2: User
+// Tracks flagged users, troll status, and custom restriction flags.
+// ============================================================================
+model User {
+  id                    String   @id @default(cuid())
+  discordUserId         String
+  guild                 Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  guildId               String
+
+  username              String
+
+  // Flags & Restrictions
+  isTroll               Boolean  @default(false)       // Persistent troll flagged for shadow-ban
+  warningCount          Int      @default(0)
+  isMuted               Boolean  @default(false)
+  isBanned              Boolean  @default(false)
+
+  // Custom restriction data
+  muteUntil             DateTime? // Timestamp when mute expires
+  customFlags           String?   // JSON: {"restricted_channels": ["123", "456"]}
+
+  // Metadata
+  firstSeenAt           DateTime @default(now())
+  lastActivityAt        DateTime @updatedAt
+
+  // Relationships
+  messages              ChatMessage[]
+  actions               AiAction[]
+
+  // Composite key: a user is unique per guild
+  @@unique([discordUserId, guildId])
+}
+
+// ============================================================================
+// TABLE 3: ChatMessage
+// Caches batched text logs for AI analysis and audit trails.
+// ============================================================================
+model ChatMessage {
+  id                    String   @id @default(cuid())
+
+  // Link to guild & user
+  guild                 Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  guildId               String
+
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId                String
+
+  // Message content
+  discordMessageId      String
+  discordChannelId      String
+  content               String   @db.Text
+
+  // Batching metadata
+  batchId               String?  // Groups messages from the same 3-second window
+
+  // AI analysis result
+  toxicityScore         Float?   // 0.0-1.0 from AI engine
+  isFlagged             Boolean  @default(false)
+  aiSuggestedAction     String?  // "none", "warn", "mute", "ban", "shadow-ban"
+  aiReason              String?  @db.Text
+
+  createdAt             DateTime @default(now())
+
+  // Composite index for batch queries
+  @@index([guildId, batchId])
+  @@index([userId, guildId])
+}
+
+// ============================================================================
+// TABLE 4: AiAction
+// Audit log: every warning, mute, ban, and shadow-ban executed by the AI.
+// ============================================================================
+model AiAction {
+  id                    String   @id @default(cuid())
+
+  // Link to guild & user
+  guild                 Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  guildId               String
+
+  targetUser            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId                String
+
+  // Action details
+  actionType            String   // "warn", "mute", "ban", "shadow-ban", "unmute", "unban"
+  reason                String   @db.Text
+
+  // Evidence: the message that triggered this action
+  triggeredByMessageId  String?  // Reference to Discord message ID
+  messageContent        String?  @db.Text
+
+  // Enforcement details
+  muteDurationSeconds   Int?     // How long the mute lasts (null = permanent)
+  executedAt            DateTime @default(now())
+
+  // Reversal tracking
+  reversedAt            DateTime?
+  reversalReason        String?
+
+  // Relationships
+  @@index([guildId, executedAt])
+  @@index([userId, actionType])
+}
+
+// ============================================================================
+// TABLE 5: ExternalThreat
+// Logs alerts discovered via COMPLIANT methods:
+// - Official Reddit API (PRAW) keyword monitoring only
+// - Internal Discord link detection
+// - Admin-reported threats via bot commands
+// ============================================================================
+model ExternalThreat {
+  id                    String   @id @default(cuid())
+
+  guild                 Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  guildId               String
+
+  // Threat source & method (compliant)
+  source                String   // "reddit_official_api", "discord_internal", "admin_report"
+  sourceUrl             String?  @db.Text // Optional: post URL (never stores user data)
+
+  // What triggered the alert (keyword match only, NO PII stored)
+  matchedKeyword        String   // The search term that matched (e.g., "server-name", "invite-code-ABC")
+  postTitle             String?  @db.Text // Title only (no username, no post body)
+
+  // Severity & response
+  severity              Int      @default(1) // 1=low, 2=medium, 3=high, 4=critical
+
+  // Automated response
+  automatedActionTaken  String?  // "verification_level_raised", "invites_paused", "alert_sent", etc.
+  actionExecutedAt      DateTime?
+
+  // Status & audit trail
+  resolved              Boolean  @default(false)
+  resolvedAt            DateTime?
+  resolvedBy            String?  // Admin Discord ID who resolved it
+  resolvedNotes         String?
+
+  // Compliance tracking
+  complianceMethod      String   @default("keyword_only") // Documents what data was collected
+  dataRetentionDays     Int      @default(30) // Auto-purge after 30 days to minimize PII exposure
+
+  createdAt             DateTime @default(now())
+
+  @@index([guildId, severity])
+  @@index([guildId, createdAt])
+}
+
+// ============================================================================
+// TABLE 6: ModMetric
+// Tracks moderator activity and calculated burnout states.
+// ============================================================================
+model ModMetric {
+  id                    String   @id @default(cuid())
+
+  guild                 Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  guildId               String
+
+  // Time window (e.g., daily or weekly snapshot)
+  date                  DateTime // Start of the day/week for this metric
+
+  // Raw counts
+  totalMessagesAnalyzed Int      @default(0)
+  flaggedMessagesCount  Int      @default(0)
+  warningsIssued        Int      @default(0)
+  mutesIssued           Int      @default(0)
+  bansIssued            Int      @default(0)
+  shadowBansActive      Int      @default(0)
+
+  // Calculated metrics
+  toxicityRate          Float    @default(0.0) // percentage of messages flagged
+  avgToxicityScore      Float    @default(0.0)
+
+  // Moderator burnout indicator
+  burnoutScore          Float    @default(0.0) // 0.0-1.0 (composite of action volume + threat volume)
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([guildId, date])
+  @@index([guildId])
+}
