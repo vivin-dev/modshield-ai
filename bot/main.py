@@ -23,11 +23,28 @@ async def on_ready():
     logger.info(f"✅ Bot logged in as {bot.user}")
 
 @bot.event
+@bot.event
 async def on_message(message):
+        """Monitor and moderate all messages."""
+        # Ignore bot's own messages
     if message.author == bot.user:
-        return
-    
+                return
+
+    # Log message
     logger.info(f"Message from {message.author}: {message.content}")
+
+    # Profanity filter
+    profanity_words = ["fuck", "shit", "damn", "ass", "crap", "bitch", "piss"]
+    content_lower = message.content.lower()
+
+    for word in profanity_words:
+                if word in content_lower:
+                                logger.warning(f"Profanity detected from {message.author}: {message.content}")
+                                await message.delete()
+                                await message.channel.send(f"{message.author.mention} - please keep chat family-friendly! Message deleted.")
+                                return
+
+    # Process commands
     await bot.process_commands(message)
 
 @bot.command(name="health")
