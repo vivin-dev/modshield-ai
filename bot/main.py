@@ -42,3 +42,4 @@ if __name__ == "__main__":
         logger.error("❌ DISCORD_TOKEN not found in environment")
         exit(1)
     bot.run(TOKEN)
+# Latest deployment ready
